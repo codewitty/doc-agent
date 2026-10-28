@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doc Agent</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <h1>Doc Agent</h1>
+      <span id="model-info" class="muted"></span>
+      <span id="who" class="muted" data-testid="who"></span>
+      <button id="sign-out" class="link" hidden>Sign out</button>
+    </header>
+
+    <main>
+      <section id="sign-in" class="card" hidden>
+        <h2>Sign in</h2>
+        <form id="sign-in-form">
+          <label for="token">Access token</label>
+          <input id="token" name="token" type="password" autocomplete="off" required />
+          <p class="muted">Local dev tokens: <code>alice-dev-token</code>, <code>bob-dev-token</code></p>
+          <button type="submit">Sign in</button>
+          <p id="sign-in-error" class="error" role="alert"></p>
+        </form>
+      </section>
+
+      <div id="workspace" class="grid" hidden>
+        <section class="card" aria-labelledby="docs-heading">
+          <h2 id="docs-heading">Documents</h2>
+          <ul id="documents" data-testid="documents"></ul>
+          <form id="upload-form">
+            <label for="file">Upload PDF, DOCX, CSV, TXT or MD (max 5 MB)</label>
+            <input id="file" name="file" type="file" accept=".pdf,.docx,.csv,.txt,.md" required />
+            <button type="submit">Upload</button>
+            <p id="upload-status" role="status"></p>
+          </form>
+        </section>
+
+        <section class="card wide" aria-labelledby="ask-heading">
+          <h2 id="ask-heading">Ask</h2>
+          <form id="ask-form">
+            <label for="question">Question or request</label>
+            <textarea id="question" name="question" rows="2" maxlength="2000" required
+              placeholder="When is payment due on invoices?"></textarea>
+            <button type="submit" id="ask-button">Ask</button>
+          </form>
+
+          <div id="run" data-testid="run" hidden>
+            <p>Status: <span id="run-status" class="badge" data-testid="run-status"></span></p>
+            <p id="run-error" class="error" role="alert"></p>
+            <blockquote id="answer" data-testid="answer"></blockquote>
+            <div id="citations-wrap">
+              <h3>Sources</h3>
+              <ul id="citations" data-testid="citations"></ul>
+            </div>
+            <ul id="warnings" class="warnings" data-testid="warnings"></ul>
+
+            <div id="approval" class="approval" data-testid="approval" hidden>
+              <h3>Approval needed</h3>
+              <p id="approval-reason"></p>
+              <pre id="approval-args"></pre>
+              <label for="approval-note">Note (optional)</label>
+              <input id="approval-note" maxlength="500" />
+              <div class="actions">
+                <button id="approve" type="button">Approve</button>
+                <button id="reject" type="button" class="secondary">Reject</button>
+              </div>
+            </div>
+
+            <details>
+              <summary>Execution trace</summary>
+              <table>
+                <thead><tr><th>#</th><th>Step</th><th>ms</th><th>Detail</th></tr></thead>
+                <tbody id="trace" data-testid="trace"></tbody>
+              </table>
+            </details>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
