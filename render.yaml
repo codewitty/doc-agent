@@ -1,0 +1,30 @@
+# Render Blueprint: free web service. Postgres is the AskMyDocs Supabase
+# project (tables go in a separate doc_agent schema). Set the secrets marked
+# sync: false in the Render dashboard.
+services:
+  - type: web
+    name: doc-agent
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -e ".[postgres]"
+    startCommand: uvicorn doc_agent.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DOC_AGENT_ENV
+        value: prod
+      - key: DOC_AGENT_SEED_USERS
+        value: demo
+      # Supabase pooler URL (session mode, port 5432). The direct connection
+      # is IPv6-only and Render egress is IPv4.
+      - key: DATABASE_URL
+        sync: false
+      # token:user pairs, e.g. <random>:demo
+      - key: DOC_AGENT_TOKENS
+        sync: false
+      # Leave unset to run the keyless demo on the live site
+      - key: OPENAI_API_KEY
+        sync: false
