@@ -1,6 +1,6 @@
 # Runs on every pull request and on main. Everything here is keyless and
 # deterministic: fake model, hashing embedder, SQLite and a throwaway
-# Postgres. Render deploys main only after these checks pass.
+# Postgres. deploy.yml deploys main only after these checks pass.
 name: CI
 
 on:
