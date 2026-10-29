@@ -29,7 +29,6 @@ from typing import Any
 from doc_agent.agent.orchestrator import Agent, Limits
 from doc_agent.config import Settings
 from doc_agent.container import build_container
-from doc_agent.data.sqlite import SQLiteDatabase, SQLiteDocumentRepository, SQLiteRunRepository
 from doc_agent.fixtures import FIXTURES, fixture_document_id, seed_fixtures
 from evals import injections
 from evals.cases import EvalCase, load_cases
@@ -72,8 +71,7 @@ async def run_case(
     db_path = workdir / f"{case.id}-{n}.db"
     shutil.copy(template, db_path)
     container = build_container(_settings(model, f"sqlite:///{db_path}"))
-    db = SQLiteDatabase(db_path)
-    documents = SQLiteDocumentRepository(db)
+    documents = container.documents
 
     limits = Limits(tool_timeout_s=1.0, model_timeout_s=30.0)
     chat, docs, embedder = injections.apply(
@@ -82,7 +80,7 @@ async def run_case(
     agent = Agent(
         model=chat,
         documents=docs,
-        runs=SQLiteRunRepository(db),
+        runs=container.runs,
         embedder=embedder,
         limits=limits,
         now=lambda: EVAL_NOW,
