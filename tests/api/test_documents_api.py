@@ -11,13 +11,22 @@ def upload(client: TestClient, name: str, data: bytes, token: str = ALICE) -> An
     return client.post("/api/documents", files={"file": (name, data)}, headers=auth(token))
 
 
-def test_health_reports_backends(client: TestClient) -> None:
+def test_health_reports_backends(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
     assert client.get("/api/health").json() == {
         "status": "ok",
         "model": "heuristic",
         "embedder": "hashing:256",
         "database": "sqlite",
+        "version": "dev",
     }
+
+
+def test_health_reports_the_deployed_commit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc123")
+    assert client.get("/api/health").json()["version"] == "abc123"
 
 
 def test_list_documents_is_per_user(client: TestClient) -> None:
