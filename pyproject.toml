@@ -55,6 +55,6 @@ known-first-party = ["doc_agent", "tests", "evals"]  # ruff format owns line len
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["doc_agent"]
+packages = ["doc_agent", "evals"]
 mypy_path = "src"
 ignore_missing_imports = true

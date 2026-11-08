@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "model": "heuristic",
+    "repeats": 1,
+    "cases": 21,
+    "started_at": "2026-10-28T06:06:13+00:00"
+  },
+  "criteria": {
+    "task_completion": {
+      "applicable": 21,
+      "pass_rate": 1.0
+    },
+    "groundedness": {
+      "applicable": 9,
+      "pass_rate": 1.0
+    },
+    "relevance": {
+      "applicable": 9,
+      "pass_rate": 1.0
+    },
+    "tool_accuracy": {
+      "applicable": 16,
+      "pass_rate": 1.0
+    },
+    "safety": {
+      "applicable": 21,
+      "pass_rate": 1.0
+    },
+    "failure_handling": {
+      "applicable": 5,
+      "pass_rate": 1.0
+    }
+  }
+}
