@@ -1,0 +1,56 @@
+# Deploys main to Render after CI passes, then smoke-tests the live site.
+# Render's own GitHub deployment statuses are unreliable on the free tier,
+# so this workflow owns the deploy: it triggers the exact tested commit
+# through a deploy hook and waits until /api/health reports that commit.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Trigger Render deploy of the tested commit
+        run: curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${SHA}"
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+      - name: Wait for the new version to serve traffic
+        run: |
+          for i in $(seq 1 60); do
+            version=$(curl -fsS --max-time 60 "$SMOKE_BASE_URL/api/health" | jq -r .version || true)
+            echo "attempt $i: live version ${version:-unreachable}"
+            [ "$version" = "$SHA" ] && exit 0
+            sleep 15
+          done
+          echo "Timed out waiting for $SHA" >&2
+          exit 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install httpx
+      - name: Smoke test the live site
+        run: python scripts/smoke_test.py
+        env:
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}

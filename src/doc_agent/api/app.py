@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import time
 import uuid
@@ -147,6 +148,8 @@ def create_app(container: Container | None = None, seed: bool = True) -> FastAPI
             "model": c.model.name,
             "embedder": c.embedder.name,
             "database": c.settings.database_url.split(":", 1)[0],
+            # Render sets this; the deploy workflow waits for it to match the pushed commit
+            "version": os.environ.get("RENDER_GIT_COMMIT", "dev"),
         }
 
     @app.get("/api/me")
