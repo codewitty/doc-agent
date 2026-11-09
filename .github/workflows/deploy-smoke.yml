@@ -1,0 +1,22 @@
+# Runs against the live site after Render reports a successful deploy, or
+# by hand. Read-only apart from one agent run, so it is safe on production.
+name: Post-deploy smoke test
+
+on:
+  deployment_status:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install httpx
+      - run: python scripts/smoke_test.py
+        env:
+          SMOKE_BASE_URL: ${{ github.event.deployment_status.environment_url || vars.SMOKE_BASE_URL }}
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
