@@ -26,7 +26,7 @@ Open http://localhost:8000 and sign in with `alice-dev-token`. Alice starts with
 Without `OPENAI_API_KEY` the app runs a deterministic stand-in model and a hashing embedder. Set the key to switch both to OpenAI (`gpt-4o-mini` and `text-embedding-3-small`). `.env.example` lists every setting.
 
 ```bash
-pytest                          # 134 tests in about 5 seconds; Postgres tests skip without DATABASE_URL_TEST
+pytest                          # 144 tests in about 5 seconds; 5 Postgres tests skip without DATABASE_URL_TEST
 pytest -m e2e                   # Playwright browser test (run `playwright install chromium` once)
 python -m evals.run             # keyless eval suite
 OPENAI_API_KEY=sk-... python -m evals.run --model openai --repeats 3
@@ -105,15 +105,15 @@ Every step is appended to `run.trace` with timing and logged as one JSON line ke
 
 ## Test strategy
 
-Coverage follows risk. The agent loop, tools and guardrails are where a bug causes a wrong answer or an unapproved delete, so they have the deepest tests. Line coverage is 99 to 100% for `orchestrator.py`, `tools.py`, `guardrails.py` and `sqlite.py`, and 85% overall. `postgres.py` shows 0% locally and is covered by the contract tests in CI.
+Coverage follows risk. The agent loop, tools and guardrails are where a bug causes a wrong answer or an unapproved delete, so they have the deepest tests. Line coverage of `src/doc_agent` is 96% with a Postgres database available, as in CI, and 90% without one, since `postgres.py` is then untested. `orchestrator.py`, `tools.py`, `guardrails.py`, `sqlite.py` and `postgres.py` are at 99 to 100%.
 
 | Suite | Count | What it protects |
 |---|---|---|
 | `tests/unit` | 35 | Guardrail patterns, tool argument schemas, staleness threshold, tenant scoping in tools, config validation (prod refuses dev tokens). |
 | `tests/integration` | 20 | The agent loop end to end with a scripted model: cited answers, pause and resume across instances, rejection, deferred calls, and every injected failure. Plus the keyless demo over real fixtures. |
-| `tests/api` | 30 | Each endpoint for success, validation (422), auth (401), ownership (404), conflict (409), bad uploads (400) and outages (503). |
+| `tests/api` | 31 | Each endpoint for success, validation (422), auth (401), ownership (404), conflict (409), bad uploads (400) and outages (503). |
 | `tests/data` | 26 | Extraction of the real DOCX and CSV fixtures, CSV edge cases, chunk size and overlap, no lost words across three chunk sizes, and what the agent sees for each source. |
-| `tests/contract` | 10 | The same five behaviours against SQLite and Postgres. |
+| `tests/contract` | 19 | The same five repository behaviours against SQLite and Postgres. The OpenAI adapters against the real SDK with a mocked HTTP transport: request bodies, tool-call round trips, a full agent run, and retry on 429 and 5xx. |
 | `tests/evals` | 18 | The eval scorers catch each kind of bad run, and the keyless suite meets its thresholds. |
 | `tests/e2e` | 1 | Browser: bad token, sign in, cited answer, trace, approval card, approve, document gone. Screenshots of each stage. |
 
@@ -166,7 +166,7 @@ The real-model baseline is not committed yet. It needs a first run with a key: `
 | When | Workflow | Checks |
 |---|---|---|
 | Every pull request and push to main | `ci.yml` | ruff, format, mypy strict. Full pytest suite with a pgvector container. Keyless eval gate, summary posted to the job page. Playwright test with screenshots and traces as artifacts. All keyless and deterministic. |
-| Deploy | Render, then `deploy-smoke.yml` | Render deploys main only after CI passes (`autoDeployTrigger: checksPass`). The smoke test then hits the live site: health, auth rejection, document list, one cited answer. |
+| After CI passes on main | `deploy.yml` | Triggers a Render deploy of the exact commit CI tested, waits until `/api/health` reports that commit, then smoke-tests the live site: health, auth rejection, document list, one cited answer. Render's auto-deploy is off, because its GitHub deployment statuses are unreliable on the free tier and the smoke test would never fire. |
 | Nightly | `nightly-eval.yml` | Real-model eval, 3 repeats, against thresholds and baseline. Catches prompt regressions and silent provider-side model changes, since nothing in the repo has to change for those to break things. Enabled by the `OPENAI_EVALS_ENABLED` repo variable. |
 
 The split follows cost and determinism. PR checks have to be fast, free and give the same answer every time, so they use the fakes. Real-model evals cost money and vary between runs, so they run on a schedule and on demand, where a flaky result prompts a look rather than blocking a merge.
@@ -175,10 +175,11 @@ The split follows cost and determinism. PR checks have to be fast, free and give
 
 The live site runs on Render's free tier, using the existing AskMyDocs Supabase project for Postgres. Tables go in a separate `doc_agent` schema, so they don't touch AskMyDocs.
 
-1. Push this repo to GitHub and create a Render Blueprint from `render.yaml`.
+1. Push this repo to GitHub and create a Render Blueprint from `render.yaml`. Render asks for the secret values only at this step.
 2. In Render, set `DATABASE_URL` to the Supabase pooler connection string (session mode, port 5432). The direct connection is IPv6-only and Render's outbound traffic is IPv4.
 3. Set `DOC_AGENT_TOKENS` to `<random-token>:demo`. Set `OPENAI_API_KEY` to use the real model, or leave it unset to run the keyless demo.
-4. In GitHub, set `SMOKE_TOKEN` (the same random token), `OPENAI_API_KEY`, and the variables `SMOKE_BASE_URL` and `OPENAI_EVALS_ENABLED=true`.
+4. In Render, copy the service's deploy hook URL from its settings.
+5. In GitHub, create a `production` environment with the secrets `RENDER_DEPLOY_HOOK_URL` and `SMOKE_TOKEN` (the same random token) and the variable `SMOKE_BASE_URL` (the `onrender.com` URL). For the nightly eval, add the repository secret `OPENAI_API_KEY` and the variable `OPENAI_EVALS_ENABLED=true`.
 
 On startup the app creates its schema and seeds the fixtures for the `demo` user if they are missing. A reviewer who deletes the demo documents gets them back on the next restart.
 
@@ -192,7 +193,7 @@ Both free tiers have a catch. Render sleeps after 15 minutes idle, so the first 
 - Groundedness checks numbers, not claims. "Payment is due in 30 days" and "payment is never due, see the 30 day clause" both pass when the chunk mentions 30 days.
 - The heuristic model makes the keyless eval a test of the plumbing and the scorers. It says nothing about how well a real model reasons. That is the nightly run's job.
 - Agent runs are synchronous inside the HTTP request. A slow model holds the request open.
-- The Postgres adapter has run only against CI's container so far, not against Supabase itself.
+- The Postgres adapter is tested against Postgres 18 with pgvector 0.8.1, locally and in CI, but not yet against Supabase or through its connection pooler.
 
 ## With more time
 
