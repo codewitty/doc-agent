@@ -8,6 +8,7 @@ dependencies = [
   "uvicorn[standard]>=0.30",
   "pydantic>=2.7",
   "openai>=1.50",
+  "anthropic>=2.7",
   "python-docx>=1.1",
   "pypdf>=4.0",
   "python-multipart>=0.0.9",

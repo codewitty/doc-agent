@@ -27,10 +27,12 @@ def _tokens(raw: str | None) -> dict[str, str]:
 class Settings:
     env: Env = "dev"
     database_url: str = "sqlite:///doc-agent.db"
-    model: Literal["heuristic", "openai"] = "heuristic"
+    model: Literal["heuristic", "openai", "anthropic"] = "heuristic"
     embedder: Literal["hashing", "openai"] = "hashing"
     openai_api_key: str | None = None
     openai_chat_model: str = "gpt-4o-mini"
+    anthropic_api_key: str | None = None
+    anthropic_chat_model: str = "claude-opus-5-5"
     tokens: dict[str, str] = field(default_factory=lambda: dict(DEV_TOKENS))
     seed_users: tuple[str, ...] = ("alice",)
 
@@ -48,6 +50,8 @@ class Settings:
             embedder=os.environ.get("DOC_AGENT_EMBEDDER", "openai" if key else "hashing"),  # type: ignore[arg-type]
             openai_api_key=key,
             openai_chat_model=os.environ.get("OPENAI_CHAT_MODEL", cls.openai_chat_model),
+            anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
+            anthropic_chat_model=os.environ.get("ANTHROPIC_CHAT_MODEL", cls.anthropic_chat_model),
             tokens=tokens or dict(DEV_TOKENS),
             seed_users=tuple(
                 u.strip()
@@ -59,9 +63,11 @@ class Settings:
         return settings
 
     def validate(self) -> None:
-        if self.model not in ("heuristic", "openai"):
+        if self.model not in ("heuristic", "openai", "anthropic"):
             raise ConfigError(f"Unknown DOC_AGENT_MODEL {self.model!r}")
         if self.embedder not in ("hashing", "openai"):
             raise ConfigError(f"Unknown DOC_AGENT_EMBEDDER {self.embedder!r}")
         if "openai" in (self.model, self.embedder) and not self.openai_api_key:
             raise ConfigError("OPENAI_API_KEY is required for the openai model or embedder")
+        if self.model == "anthropic" and not self.anthropic_api_key:
+            raise ConfigError("ANTHROPIC_API_KEY is required for the anthropic model")

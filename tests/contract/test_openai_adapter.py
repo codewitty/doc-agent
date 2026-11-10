@@ -215,3 +215,24 @@ def test_embedder_batches_and_orders_by_index() -> None:
         api_key="sk-test", http_client=httpx.Client(transport=httpx.MockTransport(respond))
     )
     assert OpenAIEmbedder(client).embed(["a", "b"]) == [[1.0, 0.0], [0.0, 1.0]]
+
+
+async def test_rejected_key_fails_fast_without_leaking_it(container: Container) -> None:
+    key_fragment = "sk-test"
+    error = httpx.Response(
+        401,
+        json={"error": {"message": f"Incorrect API key provided: {key_fragment}", "type": "x"}},
+    )
+    rec = Recorder([lambda _: error, lambda _: error])
+    agent = Agent(
+        model=chat_model(rec),
+        documents=container.documents,
+        runs=container.runs,
+        embedder=container.embedder,
+        now=lambda: NOW,
+    )
+    run = await agent.start("alice", "When is payment due?")
+    assert run.status == RunStatus.FAILED
+    assert run.error is not None and run.error.code == "model_auth_failed"
+    assert len(rec.requests) == 1
+    assert key_fragment not in run.model_dump_json()

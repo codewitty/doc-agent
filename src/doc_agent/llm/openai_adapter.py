@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import openai
 from openai import AsyncOpenAI, OpenAI
 
 from doc_agent.domain import Message, ToolCall
-from doc_agent.ports import FinalAnswer, ModelTurn, ToolCalls, ToolSpec
+from doc_agent.ports import FinalAnswer, ModelAuthError, ModelTurn, ToolCalls, ToolSpec
 
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
@@ -53,22 +54,25 @@ class OpenAIChatModel:
         self._model = model
 
     async def next(self, messages: list[Message], tools: list[ToolSpec]) -> ModelTurn:
-        res = await self.client.chat.completions.create(
-            model=self._model,
-            temperature=0,
-            messages=to_openai_messages(messages),  # type: ignore[arg-type]
-            tools=[
-                {
-                    "type": "function",
-                    "function": {
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.parameters,
-                    },
-                }
-                for t in tools
-            ],
-        )
+        try:
+            res = await self.client.chat.completions.create(
+                model=self._model,
+                temperature=0,
+                messages=to_openai_messages(messages),  # type: ignore[arg-type]
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        },
+                    }
+                    for t in tools
+                ],
+            )
+        except (openai.AuthenticationError, openai.PermissionDeniedError) as e:
+            raise ModelAuthError("OpenAI rejected the API key") from e
         if not res.choices:
             raise RuntimeError("model returned no choices")
         msg = res.choices[0].message

@@ -33,6 +33,9 @@ class Message(BaseModel):
     content: str | None = None
     tool_calls: list[ToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None
+    # The assistant turn exactly as the provider returned it. Claude's thinking
+    # blocks must be replayed verbatim, so they cannot be rebuilt from the fields above.
+    provider_content: list[dict[str, Any]] | None = None
 
 
 StepKind = Literal[
@@ -65,7 +68,7 @@ class PendingAction(BaseModel):
     reason: str
 
 
-ErrorCode = Literal["model_unavailable", "step_limit"]
+ErrorCode = Literal["model_unavailable", "model_auth_failed", "step_limit"]
 
 
 class RunError(BaseModel):

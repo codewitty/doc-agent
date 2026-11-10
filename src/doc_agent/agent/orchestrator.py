@@ -38,6 +38,7 @@ from doc_agent.ports import (
     ChatModel,
     DocumentRepository,
     Embedder,
+    ModelAuthError,
     ModelTurn,
     RunRepository,
     ToolCalls,
@@ -139,16 +140,24 @@ class Agent:
             if run.model_calls >= self.limits.max_model_calls:
                 return self._fail(run, "step_limit", "The agent exceeded its step budget")
 
-            turn = await self._call_model(run)
+            try:
+                turn = await self._call_model(run)
+            except ModelAuthError as e:
+                return self._fail(run, "model_auth_failed", str(e))
             if turn is None:
                 return self._fail(run, "model_unavailable", "The language model is unavailable")
 
             if not isinstance(turn, ToolCalls):
-                self._finish(run, turn.content)
+                self._finish(run, turn.content, turn.raw)
                 break
 
             run.messages.append(
-                Message(role="assistant", content=turn.content, tool_calls=turn.calls)
+                Message(
+                    role="assistant",
+                    content=turn.content,
+                    tool_calls=turn.calls,
+                    provider_content=turn.raw,
+                )
             )
             for call in turn.calls:
                 await self._handle_call(run, call)
@@ -202,6 +211,8 @@ class Agent:
                     {"source": "model", "attempt": attempt, "message": _describe(e)},
                     started,
                 )
+                if isinstance(e, ModelAuthError):
+                    raise  # a rejected key fails the same way on retry
                 if run.model_calls >= self.limits.max_model_calls:
                     break
                 continue
@@ -281,7 +292,7 @@ class Agent:
         )
         self._tool_message(run, call, out.content)
 
-    def _finish(self, run: AgentRun, answer: str) -> None:
+    def _finish(self, run: AgentRun, answer: str, raw: list[dict[str, Any]] | None = None) -> None:
         searched = any(
             s.kind == "tool" and s.detail.get("tool") == "search_documents" and s.detail.get("ok")
             for s in run.trace
@@ -296,7 +307,7 @@ class Agent:
                 "unknown_citations": check.unknown_citations,
             },
         )
-        run.messages.append(Message(role="assistant", content=answer))
+        run.messages.append(Message(role="assistant", content=answer, provider_content=raw))
         run.answer = answer
         run.citations = check.citations
         if check.unknown_citations:

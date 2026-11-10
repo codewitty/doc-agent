@@ -23,15 +23,23 @@ class ToolSpec:
 @dataclass(frozen=True)
 class FinalAnswer:
     content: str
+    raw: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
 class ToolCalls:
     calls: list[ToolCall]
     content: str | None = None
+    # Provider-native assistant content, stored on the message for replay
+    raw: list[dict[str, Any]] | None = None
 
 
 ModelTurn = FinalAnswer | ToolCalls
+
+
+class ModelAuthError(RuntimeError):
+    """The provider rejected the API key. Adapters raise this in place of the
+    SDK error, whose message can echo part of the key into traces and logs."""
 
 
 class ChatModel(Protocol):
