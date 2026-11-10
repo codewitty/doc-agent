@@ -1401,6 +1401,46 @@ label {
   accent-color: var(--accent);
 }
 
+.privacy {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border));
+  border-radius: 10px;
+  background: var(--ok-soft);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.privacy svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.privacy strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.privacy ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.privacy li + li {
+  margin-top: 2px;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

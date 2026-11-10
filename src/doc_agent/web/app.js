@@ -114,7 +114,7 @@ function renderModelBadge() {
   $("mode-label").textContent = label;
   badge.classList.toggle("demo", demo);
   badge.classList.toggle("byok", Boolean(model));
-  badge.title = "Change model";
+  badge.title = model ? "Change model. Your key stays in this browser and is never saved on our servers." : "Change model";
   $("model-info").textContent = model ? `${model.provider} · your key` : serverModel;
 }
 
@@ -141,6 +141,12 @@ function syncKeyField() {
   const provider = selectedProvider();
   $("key-field").hidden = provider === "demo";
   $("model-key").placeholder = provider === "anthropic" ? "sk-ant-..." : "sk-...";
+  for (const el of document.querySelectorAll(".provider-name")) {
+    el.textContent = provider === "anthropic" ? "Anthropic" : "OpenAI";
+  }
+  $("key-storage").textContent = $("remember-key").checked
+    ? "Kept in this browser's local storage until you remove it."
+    : "Kept in this tab only. Closing the tab clears it.";
 }
 
 async function saveModel(e) {
@@ -483,6 +489,8 @@ $("sign-in-form").addEventListener("submit", async (e) => {
 
 $("sign-out").addEventListener("click", () => {
   setToken(null);
+  setModel(null);
+  renderModelBadge();
   runs = [];
   animatedCount = 0;
   renderThread();
@@ -496,6 +504,7 @@ $("model-cancel").addEventListener("click", () => $("model-dialog").close());
 for (const r of document.querySelectorAll("input[name=provider]")) {
   r.addEventListener("change", syncKeyField);
 }
+$("remember-key").addEventListener("change", syncKeyField);
 
 $("new-chat").addEventListener("click", () => {
   runs = [];
