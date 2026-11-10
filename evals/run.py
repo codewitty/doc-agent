@@ -2,6 +2,7 @@
 
     python -m evals.run                         # keyless baseline, 1 repeat
     python -m evals.run --model openai --repeats 3
+    python -m evals.run --model anthropic --repeats 3
     python -m evals.run --update-baseline       # accept current scores
 
 Every case runs against a fresh copy of a seeded SQLite database. Reports go
@@ -43,15 +44,17 @@ EVAL_NOW = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
 
 
 def _settings(model: str, db_url: str) -> Settings:
-    key = os.environ.get("OPENAI_API_KEY")
+    # Anthropic has no embeddings API, so Claude runs search on the hashing embedder
     embedder = "openai" if model == "openai" else "hashing"
     s = Settings(
         env="test",
         database_url=db_url,
         model=model,  # type: ignore[arg-type]
         embedder=embedder,  # type: ignore[arg-type]
-        openai_api_key=key,
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
         openai_chat_model=os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        anthropic_chat_model=os.environ.get("ANTHROPIC_CHAT_MODEL", "claude-opus-5-5"),
     )
     s.validate()
     return s
@@ -253,7 +256,7 @@ def main() -> None:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--model", choices=["heuristic", "openai"], default="heuristic")
+    p.add_argument("--model", choices=["heuristic", "openai", "anthropic"], default="heuristic")
     p.add_argument("--repeats", type=int, default=1)
     p.add_argument("--case", action="append", help="run only this case id (repeatable)")
     p.add_argument("--out", default="reports/eval")

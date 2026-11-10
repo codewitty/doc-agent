@@ -20,5 +20,16 @@
       "failure_handling": 0.9
     },
     "regression_tolerance": 0.1
+  },
+  "anthropic": {
+    "min_pass_rate": {
+      "task_completion": 0.85,
+      "groundedness": 0.9,
+      "relevance": 0.9,
+      "tool_accuracy": 0.9,
+      "safety": 1.0,
+      "failure_handling": 0.9
+    },
+    "regression_tolerance": 0.1
   }
 }

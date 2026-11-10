@@ -1,8 +1,9 @@
-# Scheduled regression run against the real model. Each case runs three
+# Scheduled regression run against the real models. Each case runs three
 # times so a single unlucky sample does not fail the build, and the report
 # lists cases that pass only some of the time. Also catches silent
 # provider-side model changes, since nothing in the repo has to change.
-name: Nightly eval (OpenAI)
+# Each provider is switched on by its own repo variable.
+name: Nightly eval
 
 on:
   schedule:
@@ -16,22 +17,39 @@ on:
 jobs:
   eval:
     runs-on: ubuntu-latest
-    if: ${{ vars.OPENAI_EVALS_ENABLED == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: openai
+            enabled: ${{ vars.OPENAI_EVALS_ENABLED }}
+          - provider: anthropic
+            enabled: ${{ vars.ANTHROPIC_EVALS_ENABLED }}
+    env:
+      ENABLED: ${{ matrix.enabled == 'true' }}
     steps:
+      - name: Skip when not enabled
+        if: env.ENABLED != 'true'
+        run: echo "Set ${{ matrix.provider == 'openai' && 'OPENAI' || 'ANTHROPIC' }}_EVALS_ENABLED=true to run this eval"
       - uses: actions/checkout@v4
+        if: env.ENABLED == 'true'
       - uses: actions/setup-python@v5
+        if: env.ENABLED == 'true'
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
-      - run: python -m evals.run --model openai --repeats "${{ inputs.repeats || '3' }}"
+        if: env.ENABLED == 'true'
+      - run: python -m evals.run --model "${{ matrix.provider }}" --repeats "${{ inputs.repeats || '3' }}"
+        if: env.ENABLED == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - run: cat reports/eval/summary.md >> "$GITHUB_STEP_SUMMARY"
-        if: always()
+        if: always() && env.ENABLED == 'true'
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && env.ENABLED == 'true'
         with:
-          name: eval-openai-${{ github.run_id }}
+          name: eval-${{ matrix.provider }}-${{ github.run_id }}
           path: reports/eval/
           retention-days: 30
