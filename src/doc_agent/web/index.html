@@ -4,82 +4,171 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Doc Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
     <link rel="stylesheet" href="/static/styles.css" />
     <script src="/static/app.js" defer></script>
   </head>
   <body>
-    <header>
-      <h1>Doc Agent</h1>
-      <span id="model-info" class="muted"></span>
-      <span id="who" class="muted" data-testid="who"></span>
-      <button id="sign-out" class="link" hidden>Sign out</button>
-    </header>
-
-    <main>
-      <section id="sign-in" class="card" hidden>
-        <h2>Sign in</h2>
+    <!-- Sign in -->
+    <section id="sign-in" class="auth" hidden>
+      <div class="auth-card">
+        <div class="brand brand-lg">
+          <span class="logo" aria-hidden="true"></span>
+          <span>Doc Agent</span>
+        </div>
+        <h1>Welcome back</h1>
+        <p class="muted">Ask questions about your documents and get answers with sources. Destructive actions wait for your approval.</p>
         <form id="sign-in-form">
           <label for="token">Access token</label>
-          <input id="token" name="token" type="password" autocomplete="off" required />
-          <p class="muted">Local dev tokens: <code>alice-dev-token</code>, <code>bob-dev-token</code></p>
-          <button type="submit">Sign in</button>
-          <p id="sign-in-error" class="error" role="alert"></p>
+          <input id="token" name="token" type="password" autocomplete="off" placeholder="Paste your token" required />
+          <p id="dev-tokens" class="hint" hidden>Local dev tokens: <code>alice-dev-token</code>, <code>bob-dev-token</code></p>
+          <p id="sign-in-error" class="form-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary btn-block">Sign in</button>
         </form>
-      </section>
+      </div>
+      <ul class="auth-points">
+        <li><span class="dot"></span>Every answer cites its source</li>
+        <li><span class="dot"></span>Deletions need human approval</li>
+        <li><span class="dot"></span>Step-by-step trace of every run</li>
+      </ul>
+    </section>
 
-      <div id="workspace" class="grid" hidden>
-        <section class="card" aria-labelledby="docs-heading">
-          <h2 id="docs-heading">Documents</h2>
-          <ul id="documents" data-testid="documents"></ul>
-          <form id="upload-form">
-            <label for="file">Upload PDF, DOCX, CSV, TXT or MD (max 5 MB)</label>
-            <input id="file" name="file" type="file" accept=".pdf,.docx,.csv,.txt,.md" required />
-            <button type="submit">Upload</button>
-            <p id="upload-status" role="status"></p>
-          </form>
-        </section>
+    <!-- App -->
+    <div id="workspace" class="app" hidden>
+      <aside class="sidebar" aria-labelledby="docs-heading">
+        <div class="brand">
+          <span class="logo" aria-hidden="true"></span>
+          <span>Doc Agent</span>
+        </div>
 
-        <section class="card wide" aria-labelledby="ask-heading">
-          <h2 id="ask-heading">Ask</h2>
-          <form id="ask-form">
-            <label for="question">Question or request</label>
-            <textarea id="question" name="question" rows="2" maxlength="2000" required
-              placeholder="When is payment due on invoices?"></textarea>
-            <button type="submit" id="ask-button">Ask</button>
-          </form>
+        <button id="new-chat" type="button" class="btn btn-ghost btn-block new-chat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          New conversation
+        </button>
 
-          <div id="run" data-testid="run" hidden>
-            <p>Status: <span id="run-status" class="badge" data-testid="run-status"></span></p>
-            <p id="run-error" class="error" role="alert"></p>
-            <blockquote id="answer" data-testid="answer"></blockquote>
-            <div id="citations-wrap">
-              <h3>Sources</h3>
-              <ul id="citations" data-testid="citations"></ul>
+        <div class="side-section">
+          <div class="side-title">
+            <h2 id="docs-heading">Documents</h2>
+            <span id="doc-count" class="count"></span>
+          </div>
+          <ul id="documents" class="doc-list" data-testid="documents"></ul>
+        </div>
+
+        <form id="upload-form" class="dropzone">
+          <input id="file" name="file" type="file" accept=".pdf,.docx,.csv,.txt,.md" />
+          <label for="file">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+            <span><strong>Upload a document</strong><br />PDF, DOCX, CSV, TXT or MD up to 5 MB</span>
+          </label>
+          <p id="upload-status" class="upload-status" role="status"></p>
+        </form>
+
+        <div class="account">
+          <span id="avatar" class="avatar" aria-hidden="true"></span>
+          <div class="account-text">
+            <span id="who" data-testid="who"></span>
+            <span id="model-info" class="muted small"></span>
+          </div>
+          <button id="sign-out" type="button" class="icon-btn" aria-label="Sign out" title="Sign out">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" /></svg>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 id="ask-heading">Ask your documents</h1>
+            <p class="muted small">Answers are grounded in your files. Deleting anything needs your approval.</p>
+          </div>
+          <span id="mode-badge" class="mode-badge"></span>
+        </header>
+
+        <div id="thread" class="thread" aria-live="polite">
+          <div id="empty" class="empty">
+            <div class="empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></svg>
             </div>
-            <ul id="warnings" class="warnings" data-testid="warnings"></ul>
+            <h2>What do you want to know?</h2>
+            <p class="muted">Try one of these, or ask your own question.</p>
+            <div class="suggestions">
+              <button type="button" class="suggestion" data-q="When is payment due on invoices?">
+                <span class="s-kind">Contract</span>When is payment due on invoices?
+              </button>
+              <button type="button" class="suggestion" data-q="How many days per week can employees work remotely?">
+                <span class="s-kind">Handbook</span>How many days per week can employees work remotely?
+              </button>
+              <button type="button" class="suggestion" data-q="What is the Growth plan monthly price?">
+                <span class="s-kind">Stale data</span>What is the Growth plan monthly price?
+              </button>
+              <button type="button" class="suggestion" data-q="Delete the pricing-2024 document">
+                <span class="s-kind warn">Needs approval</span>Delete the pricing-2024 document
+              </button>
+            </div>
+          </div>
+        </div>
 
-            <div id="approval" class="approval" data-testid="approval" hidden>
-              <h3>Approval needed</h3>
-              <p id="approval-reason"></p>
-              <pre id="approval-args"></pre>
-              <label for="approval-note">Note (optional)</label>
-              <input id="approval-note" maxlength="500" />
+        <form id="ask-form" class="composer">
+          <div class="composer-box">
+            <textarea id="question" name="question" rows="1" maxlength="2000" required
+              aria-label="Question or request"
+              placeholder="Ask about your documents…"></textarea>
+            <button type="submit" id="ask-button" class="send" aria-label="Ask">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+            </button>
+          </div>
+          <p class="composer-hint muted small">Enter to send, Shift+Enter for a new line</p>
+        </form>
+      </main>
+    </div>
+
+    <template id="run-template">
+      <article class="turn">
+        <div class="bubble-row"><div class="bubble q"></div></div>
+        <div class="reply">
+          <div class="reply-avatar" aria-hidden="true"><span class="logo sm"></span></div>
+          <div class="reply-body">
+            <div class="reply-head">
+              <span class="status-pill"></span>
+              <span class="meta muted small"></span>
+            </div>
+            <div class="answer"></div>
+            <p class="run-error" role="alert"></p>
+            <ul class="warnings"></ul>
+            <div class="sources">
+              <h3>Sources</h3>
+              <ul class="citations"></ul>
+            </div>
+            <div class="approval">
+              <div class="approval-head">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /><path d="M12 8v5M12 16h.01" /></svg>
+                <div>
+                  <h3>Approval needed</h3>
+                  <p class="approval-reason"></p>
+                </div>
+              </div>
+              <code class="approval-args"></code>
+              <input class="approval-note" maxlength="500" aria-label="Note (optional)" placeholder="Add a note (optional)" />
               <div class="actions">
-                <button id="approve" type="button">Approve</button>
-                <button id="reject" type="button" class="secondary">Reject</button>
+                <button type="button" class="btn btn-danger approve">Approve</button>
+                <button type="button" class="btn btn-ghost reject">Reject</button>
               </div>
             </div>
-
-            <details>
-              <summary>Execution trace</summary>
-              <table>
-                <thead><tr><th>#</th><th>Step</th><th>ms</th><th>Detail</th></tr></thead>
-                <tbody id="trace" data-testid="trace"></tbody>
-              </table>
+            <details class="trace-wrap">
+              <summary>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                Execution trace <span class="trace-count muted"></span>
+              </summary>
+              <ol class="trace"></ol>
             </details>
           </div>
-        </section>
-      </div>
-    </main>
+        </div>
+      </article>
+    </template>
   </body>
 </html>

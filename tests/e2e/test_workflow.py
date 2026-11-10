@@ -80,16 +80,16 @@ def test_ask_cite_then_delete_with_approval(server: str, page: Page) -> None:
     docs = page.get_by_test_id("documents")
     expect(docs.locator("li")).to_have_count(3)
     expect(docs.locator("li", has_text="pricing-2024.csv")).to_contain_text("stale")
-    page.screenshot(path=SHOTS / "1-signed-in.png", full_page=True)
+    page.screenshot(path=SHOTS / "1-signed-in.png", full_page=True, animations="disabled")
 
     page.get_by_label("Question or request").fill("When is payment due on invoices?")
     page.get_by_role("button", name="Ask").click()
     expect(page.get_by_test_id("run-status")).to_have_attribute("data-status", "completed")
     expect(page.get_by_test_id("answer")).to_contain_text("30 days")
     expect(page.get_by_test_id("citations")).to_contain_text("service-agreement.docx")
-    page.get_by_text("Execution trace").click()
-    expect(page.get_by_test_id("trace").locator("tr")).to_have_count(5)
-    page.screenshot(path=SHOTS / "2-cited-answer.png", full_page=True)
+    page.get_by_test_id("run").get_by_text("Execution trace").click()
+    expect(page.get_by_test_id("trace").locator("li")).to_have_count(5)
+    page.screenshot(path=SHOTS / "2-cited-answer.png", full_page=True, animations="disabled")
 
     page.get_by_label("Question or request").fill("Delete the pricing-2024 document")
     page.get_by_role("button", name="Ask").click()
@@ -98,7 +98,9 @@ def test_ask_cite_then_delete_with_approval(server: str, page: Page) -> None:
     expect(approval).to_contain_text('delete_document({"document_id":"alice-pricing"})')
     # Nothing is deleted before the operator decides
     expect(docs.locator("li")).to_have_count(3)
-    page.screenshot(path=SHOTS / "3-awaiting-approval.png", full_page=True)
+    approval.get_by_role("button", name="Approve").scroll_into_view_if_needed()
+    page.wait_for_timeout(400)  # let the thread's smooth scroll settle
+    page.screenshot(path=SHOTS / "3-awaiting-approval.png", full_page=True, animations="disabled")
 
     page.get_by_role("button", name="Approve").click()
     expect(page.get_by_test_id("run-status")).to_have_attribute("data-status", "completed")
@@ -106,4 +108,4 @@ def test_ask_cite_then_delete_with_approval(server: str, page: Page) -> None:
     expect(approval).to_be_hidden()
     expect(docs.locator("li")).to_have_count(2)
     expect(docs).not_to_contain_text("pricing-2024.csv")
-    page.screenshot(path=SHOTS / "4-approved.png", full_page=True)
+    page.screenshot(path=SHOTS / "4-approved.png", full_page=True, animations="disabled")
