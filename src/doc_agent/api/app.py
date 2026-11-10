@@ -11,21 +11,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
+import anthropic
 import openai
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from doc_agent.agent.orchestrator import InvalidRunState
+from doc_agent.agent.orchestrator import Agent, InvalidRunState
 from doc_agent.agent.tools import is_stale
 from doc_agent.api.schemas import DecisionRequest, DocumentView, RunView, StartRunRequest
 from doc_agent.config import Settings
 from doc_agent.container import Container, build_container
 from doc_agent.data.ingest import IngestionError
 from doc_agent.fixtures import seed_fixtures
+from doc_agent.llm.providers import DEFAULT_MODELS, PROVIDERS, Provider
 from doc_agent.logging_config import configure_logging
+from doc_agent.ports import ModelAuthError
 
 log = logging.getLogger("doc_agent.api")
 
@@ -33,7 +36,12 @@ WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
 
 def _dependency_errors() -> tuple[type[BaseException], ...]:
-    errors: list[type[BaseException]] = [sqlite3.OperationalError, openai.APIError, TimeoutError]
+    errors: list[type[BaseException]] = [
+        sqlite3.OperationalError,
+        openai.APIError,
+        anthropic.APIError,
+        TimeoutError,
+    ]
     try:
         import psycopg
         import psycopg_pool
@@ -70,6 +78,30 @@ def current_user(
 
 
 User = Annotated[str, Depends(current_user)]
+
+
+def user_key(
+    x_model_provider: Annotated[str | None, Header()] = None,
+    x_model_key: Annotated[str | None, Header()] = None,
+) -> tuple[Provider, str] | None:
+    """A user's own model key, sent per request and never stored or logged."""
+    if x_model_provider is None and x_model_key is None:
+        return None
+    if x_model_provider not in PROVIDERS:
+        raise HTTPException(400, f"X-Model-Provider must be one of {', '.join(PROVIDERS)}")
+    if not x_model_key or not x_model_key.strip():
+        raise HTTPException(400, "X-Model-Key is required with X-Model-Provider")
+    return x_model_provider, x_model_key.strip()  # type: ignore[return-value]
+
+
+UserKey = Annotated[tuple[Provider, str] | None, Depends(user_key)]
+
+
+def get_agent(c: Deps, key: UserKey) -> Agent:
+    return c.agent(c.chat_model_for(*key) if key else None)
+
+
+RunAgent = Annotated[Agent, Depends(get_agent)]
 
 
 def create_app(container: Container | None = None, seed: bool = True) -> FastAPI:
@@ -117,6 +149,10 @@ def create_app(container: Container | None = None, seed: bool = True) -> FastAPI
     async def ingestion_error(request: Request, e: IngestionError) -> JSONResponse:
         return JSONResponse({"detail": str(e)}, status_code=400)
 
+    @app.exception_handler(ModelAuthError)
+    async def model_auth(request: Request, e: ModelAuthError) -> JSONResponse:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+
     @app.exception_handler(InvalidRunState)
     async def invalid_state(request: Request, e: InvalidRunState) -> JSONResponse:
         return JSONResponse({"detail": str(e)}, status_code=409)
@@ -156,6 +192,14 @@ def create_app(container: Container | None = None, seed: bool = True) -> FastAPI
     def me(user: User) -> dict[str, str]:
         return {"user_id": user}
 
+    @app.post("/api/model/check")
+    async def check_model_key(user: User, c: Deps, key: UserKey) -> dict[str, str]:
+        if key is None:
+            raise HTTPException(400, "Send X-Model-Provider and X-Model-Key to check a key")
+        provider, secret = key
+        await c.verify_key(provider, secret)
+        return {"provider": provider, "model": DEFAULT_MODELS[provider], "status": "ok"}
+
     @app.get("/api/documents")
     def list_documents(user: User, c: Deps) -> list[DocumentView]:
         now = datetime.now(UTC)
@@ -173,8 +217,8 @@ def create_app(container: Container | None = None, seed: bool = True) -> FastAPI
         return DocumentView.of(doc, stale=False)
 
     @app.post("/api/runs", status_code=201)
-    async def start_run(body: StartRunRequest, user: User, c: Deps) -> RunView:
-        return RunView.of(await c.agent().start(user, body.question))
+    async def start_run(body: StartRunRequest, user: User, agent: RunAgent) -> RunView:
+        return RunView.of(await agent.start(user, body.question))
 
     @app.get("/api/runs/{run_id}")
     def get_run(run_id: str, user: User, c: Deps) -> RunView:
@@ -185,8 +229,8 @@ def create_app(container: Container | None = None, seed: bool = True) -> FastAPI
         return RunView.of(run)
 
     @app.post("/api/runs/{run_id}/decision")
-    async def decide(run_id: str, body: DecisionRequest, user: User, c: Deps) -> RunView:
-        run = await c.agent().decide(user, run_id, body.approve, body.note)
+    async def decide(run_id: str, body: DecisionRequest, user: User, agent: RunAgent) -> RunView:
+        run = await agent.decide(user, run_id, body.approve, body.note)
         if run is None:
             raise HTTPException(404, "Run not found")
         return RunView.of(run)
