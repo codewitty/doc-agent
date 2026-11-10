@@ -17,6 +17,36 @@ function setToken(value) {
   } catch {}
 }
 
+// The user's own model key. Session storage unless they ask to remember it.
+const MODEL_STORE = "doc-agent-model";
+const MODEL_NAMES = { openai: "GPT-4o mini", anthropic: "Claude Opus 5.5" };
+
+function getModel() {
+  for (const store of [sessionStorage, localStorage]) {
+    try {
+      const raw = store.getItem(MODEL_STORE);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+  }
+  return null;
+}
+
+function setModel(value, remember) {
+  for (const store of [sessionStorage, localStorage]) {
+    try {
+      store.removeItem(MODEL_STORE);
+    } catch {}
+  }
+  if (!value) return;
+  try {
+    (remember ? localStorage : sessionStorage).setItem(MODEL_STORE, JSON.stringify(value));
+  } catch {}
+}
+
+function modelHeaders(model = getModel()) {
+  return model ? { "X-Model-Provider": model.provider, "X-Model-Key": model.key } : {};
+}
+
 class ApiError extends Error {
   constructor(status, detail) {
     super(typeof detail === "string" ? detail : JSON.stringify(detail));
@@ -25,12 +55,17 @@ class ApiError extends Error {
 }
 
 async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}), Authorization: `Bearer ${getToken()}` };
+  const headers = {
+    ...modelHeaders(options.model),
+    ...(options.headers || {}),
+    Authorization: `Bearer ${getToken()}`,
+  };
   if (options.json !== undefined) {
     headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(options.json);
   }
-  const res = await fetch(path, { ...options, headers });
+  const { model: _model, json: _json, ...init } = options;
+  const res = await fetch(path, { ...init, headers });
   const body = await res.json().catch(() => ({}));
   if (res.status === 401) showSignIn();
   if (!res.ok) throw new ApiError(res.status, body.detail ?? res.statusText);
@@ -57,18 +92,87 @@ async function showWorkspace() {
   const [me, health] = await Promise.all([api("/api/me"), api("/api/health")]);
   $("who").textContent = `Signed in as ${me.user_id}`;
   $("avatar").textContent = me.user_id.slice(0, 1).toUpperCase();
-  $("model-info").textContent = `${health.model} · ${health.embedder}`;
-  const demo = health.model === "heuristic";
-  const badge = $("mode-badge");
-  badge.textContent = demo ? "Demo model" : health.model;
-  badge.classList.toggle("demo", demo);
-  badge.title = demo
-    ? "Running the deterministic offline model. Set OPENAI_API_KEY for a real LLM."
-    : `Model: ${health.model}`;
+  serverModel = health.model;
+  renderModelBadge();
   $("sign-in").hidden = true;
   $("workspace").hidden = false;
   await loadDocuments();
   $("question").focus();
+}
+
+// ---- Model choice ---------------------------------------------------------
+
+let serverModel = "heuristic";
+
+function renderModelBadge() {
+  const model = getModel();
+  const badge = $("mode-badge");
+  const demo = !model && serverModel === "heuristic";
+  let label = serverModel;
+  if (model) label = `${MODEL_NAMES[model.provider]} · your key`;
+  else if (demo) label = "Demo model";
+  $("mode-label").textContent = label;
+  badge.classList.toggle("demo", demo);
+  badge.classList.toggle("byok", Boolean(model));
+  badge.title = "Change model";
+  $("model-info").textContent = model ? `${model.provider} · your key` : serverModel;
+}
+
+function openModelDialog() {
+  const model = getModel();
+  const provider = model?.provider ?? "demo";
+  document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
+  $("model-key").value = model?.key ?? "";
+  let remembered = false;
+  try {
+    remembered = Boolean(localStorage.getItem(MODEL_STORE));
+  } catch {}
+  $("remember-key").checked = remembered;
+  $("model-error").textContent = "";
+  syncKeyField();
+  $("model-dialog").showModal();
+}
+
+function selectedProvider() {
+  return document.querySelector("input[name=provider]:checked")?.value ?? "demo";
+}
+
+function syncKeyField() {
+  const provider = selectedProvider();
+  $("key-field").hidden = provider === "demo";
+  $("model-key").placeholder = provider === "anthropic" ? "sk-ant-..." : "sk-...";
+}
+
+async function saveModel(e) {
+  e.preventDefault();
+  const provider = selectedProvider();
+  const error = $("model-error");
+  error.textContent = "";
+  if (provider === "demo") {
+    setModel(null);
+    renderModelBadge();
+    $("model-dialog").close();
+    return;
+  }
+  const key = $("model-key").value.trim();
+  if (!key) {
+    error.textContent = "Paste an API key first.";
+    return;
+  }
+  const save = $("model-save");
+  save.disabled = true;
+  save.textContent = "Checking key…";
+  try {
+    await api("/api/model/check", { method: "POST", model: { provider, key } });
+    setModel({ provider, key }, $("remember-key").checked);
+    renderModelBadge();
+    $("model-dialog").close();
+  } catch (err) {
+    error.textContent = err.status === 400 ? "That key was rejected. Check it and try again." : err.message;
+  } finally {
+    save.disabled = false;
+    save.textContent = "Save";
+  }
 }
 
 // ---- Documents ------------------------------------------------------------
@@ -385,6 +489,13 @@ $("sign-out").addEventListener("click", () => {
   $("token").value = "";
   showSignIn();
 });
+
+$("mode-badge").addEventListener("click", openModelDialog);
+$("model-form").addEventListener("submit", saveModel);
+$("model-cancel").addEventListener("click", () => $("model-dialog").close());
+for (const r of document.querySelectorAll("input[name=provider]")) {
+  r.addEventListener("change", syncKeyField);
+}
 
 $("new-chat").addEventListener("click", () => {
   runs = [];

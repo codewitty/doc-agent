@@ -86,7 +86,10 @@
             <h1 id="ask-heading">Ask your documents</h1>
             <p class="muted small">Answers are grounded in your files. Deleting anything needs your approval.</p>
           </div>
-          <span id="mode-badge" class="mode-badge"></span>
+          <button id="mode-badge" type="button" class="mode-badge" aria-haspopup="dialog">
+            <span id="mode-label"></span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
         </header>
 
         <div id="thread" class="thread" aria-live="polite">
@@ -126,6 +129,51 @@
         </form>
       </main>
     </div>
+
+    <dialog id="model-dialog" class="modal" aria-labelledby="model-title">
+      <form id="model-form" method="dialog">
+        <div class="modal-head">
+          <h2 id="model-title">Choose a model</h2>
+          <p class="muted small">Bring your own OpenAI or Anthropic key, or use the free demo model.</p>
+        </div>
+
+        <fieldset class="providers">
+          <legend class="sr-only">Model provider</legend>
+          <label class="provider">
+            <input type="radio" name="provider" value="demo" />
+            <span class="provider-mark demo" aria-hidden="true">D</span>
+            <span class="provider-text"><strong>Demo model</strong><span>Deterministic and offline. No key needed.</span></span>
+          </label>
+          <label class="provider">
+            <input type="radio" name="provider" value="openai" />
+            <span class="provider-mark openai" aria-hidden="true">AI</span>
+            <span class="provider-text"><strong>OpenAI</strong><span>GPT-4o mini, with your key</span></span>
+          </label>
+          <label class="provider">
+            <input type="radio" name="provider" value="anthropic" />
+            <span class="provider-mark anthropic" aria-hidden="true">C</span>
+            <span class="provider-text"><strong>Claude</strong><span>Claude Opus 5.5, with your key</span></span>
+          </label>
+        </fieldset>
+
+        <div id="key-field" class="key-field">
+          <label for="model-key">API key</label>
+          <input id="model-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
+          <label class="check">
+            <input id="remember-key" type="checkbox" />
+            Remember on this device
+          </label>
+          <p class="hint">The key stays in this browser and is sent only with your own requests. The server uses it for that request and never stores or logs it. Search still runs on the server's embedder.</p>
+        </div>
+
+        <p id="model-error" class="form-error" role="alert"></p>
+
+        <div class="modal-actions">
+          <button type="button" id="model-cancel" class="btn btn-ghost">Cancel</button>
+          <button type="submit" id="model-save" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
 
     <template id="run-template">
       <article class="turn">
