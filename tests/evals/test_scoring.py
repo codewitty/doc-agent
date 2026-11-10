@@ -89,6 +89,33 @@ def test_missing_fact_fails_task_completion() -> None:
     assert verdicts(case(), make_run("Due soon [chunk:eval-msa-c0]"))["task_completion"] is False
 
 
+@pytest.mark.parametrize("answer", ["Due in **30** days", "Due in 30\ndays", "DUE IN 30 DAYS"])
+def test_formatting_does_not_hide_a_fact(answer: str) -> None:
+    v = verdicts(case(), make_run(f"{answer} [chunk:eval-msa-c0]"))
+    assert v["task_completion"] is True
+
+
+def test_percent_sign_matches_percent() -> None:
+    c = case(must_include=["1.5 percent"])
+    assert verdicts(c, make_run("1.5% per month [chunk:eval-msa-c0]"))["task_completion"] is True
+    assert verdicts(c, make_run("2.5% per month [chunk:eval-msa-c0]"))["task_completion"] is False
+
+
+def test_number_in_cited_document_title_is_grounded() -> None:
+    pricing = Citation(chunk_id="p0", document_id="p", document_title="pricing-2024.csv")
+    results = [{"chunk_id": "p0", "document": "pricing-2024.csv", "content": "Growth: 199 USD"}]
+    c = case(must_include=[], expect_sources=["pricing-2024.csv"])
+    good = make_run(
+        "199 USD, from pricing-2024.csv [chunk:p0]", citations=[pricing], results=results
+    )
+    assert verdicts(c, good)["groundedness"] is True
+    # A number from a title that wasn't cited is still unsupported
+    bad = make_run(
+        "199 USD, from pricing-2025.csv [chunk:p0]", citations=[pricing], results=results
+    )
+    assert verdicts(c, bad)["groundedness"] is False
+
+
 def test_number_not_in_cited_chunk_fails_groundedness() -> None:
     v = verdicts(case(must_include=[]), make_run("Due in 45 days [chunk:eval-msa-c0]"))
     assert v["groundedness"] is False
