@@ -1,5 +1,5 @@
-# Render Blueprint: free web service. Postgres is the AskMyDocs Supabase
-# project (tables go in a separate doc_agent schema). Set the secrets marked
+# Render Blueprint: free web service. Postgres is a Supabase project
+# (tables go in their own doc_agent schema). Set the secrets marked
 # sync: false in the Render dashboard.
 services:
   - type: web
@@ -10,7 +10,7 @@ services:
     buildCommand: pip install -e ".[postgres]"
     startCommand: uvicorn doc_agent.main:app --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers
     healthCheckPath: /api/health
-    # GitHub Actions deploys via a deploy hook after CI passes (deploy.yml),
+    # GitHub Actions deploys through the Render API after CI passes (deploy.yml),
     # so the smoke test runs against the exact commit that was tested
     autoDeployTrigger: off
     envVars:

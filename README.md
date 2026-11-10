@@ -4,6 +4,8 @@ A document Q&A agent. You upload contracts, handbooks or spreadsheets, ask quest
 
 The point of the project is the trust layer around the agent: tests at every level, data validation, an evaluation suite with injected failures, and CI that runs the right checks at the right time.
 
+Live demo: https://doc-agent-fsvi.onrender.com. It needs an access token, which I'll send with the submission. The free tier sleeps when idle, so the first load takes about a minute.
+
 ![Approval step in the UI](docs/sample-reports/3-awaiting-approval.png)
 
 ## Quick start
@@ -173,13 +175,12 @@ The split follows cost and determinism. PR checks have to be fast, free and give
 
 ## Deployment
 
-The live site runs on Render's free tier, using the existing AskMyDocs Supabase project for Postgres. Tables go in a separate `doc_agent` schema, so they don't touch AskMyDocs.
+The live site runs on Render's free tier, using a Supabase project for Postgres. Tables go in their own `doc_agent` schema, so the project can host other apps too.
 
 1. Push this repo to GitHub and create a Render Blueprint from `render.yaml`. Render asks for the secret values only at this step.
 2. In Render, set `DATABASE_URL` to the Supabase pooler connection string (session mode, port 5432). The direct connection is IPv6-only and Render's outbound traffic is IPv4.
 3. Set `DOC_AGENT_TOKENS` to `<random-token>:demo`. Set `OPENAI_API_KEY` to use the real model, or leave it unset to run the keyless demo.
-4. In Render, copy the service's deploy hook URL from its settings.
-5. In GitHub, create a `production` environment with the secrets `RENDER_DEPLOY_HOOK_URL` and `SMOKE_TOKEN` (the same random token) and the variable `SMOKE_BASE_URL` (the `onrender.com` URL). For the nightly eval, add the repository secret `OPENAI_API_KEY` and the variable `OPENAI_EVALS_ENABLED=true`.
+4. In GitHub, create a `production` environment with the secrets `RENDER_API_KEY` and `SMOKE_TOKEN` (the same random token) and the variables `RENDER_SERVICE_ID` (`srv-...`) and `SMOKE_BASE_URL` (the `onrender.com` URL). For the nightly eval, add the repository secret `OPENAI_API_KEY` and the variable `OPENAI_EVALS_ENABLED=true`.
 
 On startup the app creates its schema and seeds the fixtures for the `demo` user if they are missing. A reviewer who deletes the demo documents gets them back on the next restart.
 

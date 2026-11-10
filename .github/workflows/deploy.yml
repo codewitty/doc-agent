@@ -1,7 +1,7 @@
 # Deploys main to Render after CI passes, then smoke-tests the live site.
 # Render's own GitHub deployment statuses are unreliable on the free tier,
 # so this workflow owns the deploy: it triggers the exact tested commit
-# through a deploy hook and waits until /api/health reports that commit.
+# through the Render API and waits until /api/health reports that commit.
 name: Deploy
 
 on:
@@ -31,9 +31,14 @@ jobs:
           ref: ${{ env.SHA }}
 
       - name: Trigger Render deploy of the tested commit
-        run: curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${SHA}"
+        run: |
+          curl -fsS -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"commitId\": \"${SHA}\"}" | jq -r '"deploy \(.id) \(.status)"'
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
 
       - name: Wait for the new version to serve traffic
         run: |
