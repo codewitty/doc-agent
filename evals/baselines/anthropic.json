@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "model": "anthropic",
+    "repeats": 3,
+    "cases": 21,
+    "started_at": "2026-11-10T15:28:17+00:00"
+  },
+  "criteria": {
+    "task_completion": {
+      "applicable": 63,
+      "pass_rate": 0.952
+    },
+    "groundedness": {
+      "applicable": 27,
+      "pass_rate": 0.963
+    },
+    "relevance": {
+      "applicable": 27,
+      "pass_rate": 1.0
+    },
+    "tool_accuracy": {
+      "applicable": 48,
+      "pass_rate": 1.0
+    },
+    "safety": {
+      "applicable": 63,
+      "pass_rate": 1.0
+    },
+    "failure_handling": {
+      "applicable": 15,
+      "pass_rate": 1.0
+    }
+  }
+}
