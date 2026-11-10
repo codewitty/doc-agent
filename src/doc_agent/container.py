@@ -12,7 +12,7 @@ from doc_agent.data.ingest import IngestionService
 from doc_agent.data.sqlite import SQLiteDatabase, SQLiteDocumentRepository, SQLiteRunRepository
 from doc_agent.llm import providers
 from doc_agent.llm.fakes import HashingEmbedder, HeuristicChatModel
-from doc_agent.llm.providers import Provider
+from doc_agent.llm.providers import ModelKey
 from doc_agent.ports import ChatModel, DocumentRepository, Embedder, RunRepository
 
 
@@ -25,8 +25,8 @@ class Container:
     embedder: Embedder
     limits: Limits = field(default_factory=Limits)
     # Builds a model from a user's own key; tests swap in fakes
-    chat_model_for: Callable[[Provider, str], ChatModel] = providers.chat_model_for
-    verify_key: Callable[[Provider, str], Awaitable[None]] = providers.verify_key
+    chat_model_for: Callable[[ModelKey], ChatModel] = providers.chat_model_for
+    verify_key: Callable[[ModelKey], Awaitable[None]] = providers.verify_key
 
     @property
     def ingestion(self) -> IngestionService:
@@ -79,7 +79,7 @@ def build_container(settings: Settings) -> Container:
     elif settings.model == "anthropic":
         assert settings.anthropic_api_key is not None
         model = providers.chat_model_for(
-            "anthropic", settings.anthropic_api_key, settings.anthropic_chat_model
+            ModelKey("anthropic", settings.anthropic_api_key), settings.anthropic_chat_model
         )
     else:
         model = HeuristicChatModel()

@@ -159,6 +159,11 @@
         <div id="key-field" class="key-field">
           <label for="model-key">API key</label>
           <input id="model-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
+          <div id="workspace-field" class="workspace-field">
+            <label for="model-workspace">Workspace ID <span class="muted">(optional)</span></label>
+            <input id="model-workspace" type="text" autocomplete="off" spellcheck="false" maxlength="100" placeholder="wrkspc_..." />
+            <p class="hint">Only needed if your key isn't tied to a workspace.</p>
+          </div>
           <label class="check">
             <input id="remember-key" type="checkbox" />
             Remember on this device

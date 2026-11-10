@@ -21,8 +21,14 @@ from doc_agent.agent.orchestrator import Agent
 from doc_agent.agent.tools import DEFAULT_TOOLS
 from doc_agent.container import Container
 from doc_agent.domain import Message, RunStatus, ToolCall
-from doc_agent.llm.anthropic_adapter import REFUSAL_TEXT, AnthropicChatModel
-from doc_agent.ports import FinalAnswer, ToolCalls
+from doc_agent.llm.anthropic_adapter import (
+    BAD_WORKSPACE,
+    NEEDS_WORKSPACE,
+    REFUSAL_TEXT,
+    AnthropicChatModel,
+)
+from doc_agent.llm.providers import ModelKey, verify_key
+from doc_agent.ports import FinalAnswer, ModelAuthError, ToolCalls
 from tests.conftest import NOW
 
 pytestmark = pytest.mark.anyio
@@ -214,6 +220,76 @@ async def test_rejected_key_fails_fast_without_leaking_it(container: Container) 
     assert run.error is not None and run.error.code == "model_auth_failed"
     assert len(rec.requests) == 1  # a bad key fails the same way on retry
     assert KEY not in run.model_dump_json()
+
+
+UNSCOPED = (
+    "This API key is not scoped to a workspace, so this request must include the "
+    "anthropic-workspace-id header with the ID of the workspace to use."
+)
+
+
+def unscoped_key(request: httpx2.Request) -> httpx2.Response:
+    workspace = request.headers.get("anthropic-workspace-id")
+    if workspace and workspace != "wrkspc_1":
+        message = "anthropic-workspace-id header must be a valid workspace ID."
+        return httpx2.Response(
+            400,
+            json={"type": "error", "error": {"type": "invalid_request_error", "message": message}},
+        )
+    if workspace:
+        return httpx2.Response(
+            200, json={"data": [], "has_more": False, "first_id": None, "last_id": None}
+        )
+    return httpx2.Response(
+        400, json={"type": "error", "error": {"type": "invalid_request_error", "message": UNSCOPED}}
+    )
+
+
+async def test_unscoped_key_without_workspace_gets_a_clear_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_transport(monkeypatch, unscoped_key)
+    with pytest.raises(ModelAuthError) as e:
+        await verify_key(ModelKey("anthropic", KEY))
+    assert str(e.value) == NEEDS_WORKSPACE
+
+
+async def test_unscoped_key_with_workspace_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_transport(monkeypatch, unscoped_key)
+    await verify_key(ModelKey("anthropic", KEY, "wrkspc_1"))
+
+
+async def test_wrong_workspace_id_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_transport(monkeypatch, unscoped_key)
+    with pytest.raises(ModelAuthError) as e:
+        await verify_key(ModelKey("anthropic", KEY, "wrkspc_typo"))
+    assert str(e.value) == BAD_WORKSPACE
+
+
+async def test_run_with_unscoped_key_fails_with_the_workspace_message(
+    container: Container,
+) -> None:
+    error = httpx2.Response(
+        400, json={"type": "error", "error": {"type": "invalid_request_error", "message": UNSCOPED}}
+    )
+    rec = Recorder([lambda _: error])
+    run = await agent(container, claude(rec)).start("alice", "When is payment due?")
+    assert run.status == RunStatus.FAILED
+    assert run.error is not None and run.error.code == "model_auth_failed"
+    assert run.error.message == NEEDS_WORKSPACE
+
+
+def patch_transport(
+    monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx2.Request], httpx2.Response]
+) -> None:
+    """Routes clients built by verify_key through a mock transport."""
+    real = AsyncAnthropic.__init__
+
+    def init(self: AsyncAnthropic, *args: Any, **kwargs: Any) -> None:
+        kwargs["http_client"] = DefaultAsyncHttpxClient(transport=httpx2.MockTransport(handler))
+        real(self, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncAnthropic, "__init__", init)
 
 
 @pytest.mark.parametrize("status", [429, 500, 529])

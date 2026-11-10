@@ -12,6 +12,20 @@ from doc_agent.ports import FinalAnswer, ModelAuthError, ModelTurn, ToolCalls, T
 
 DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
 REFUSAL_TEXT = "I can't help with that request."
+NEEDS_WORKSPACE = (
+    "This Anthropic key isn't tied to a workspace. Add your workspace ID, "
+    "or use a key created inside a workspace."
+)
+
+BAD_WORKSPACE = "Anthropic didn't accept that workspace ID. Check it and try again."
+
+
+def workspace_error(e: anthropic.BadRequestError) -> str | None:
+    """Anthropic answers 400 when an unscoped key names no workspace, or a bad one."""
+    message = str(e.message)
+    if "anthropic-workspace-id" not in message:
+        return None
+    return NEEDS_WORKSPACE if "not scoped" in message else BAD_WORKSPACE
 
 
 def to_anthropic_messages(messages: list[Message]) -> tuple[str, list[dict[str, Any]]]:
@@ -84,6 +98,10 @@ class AnthropicChatModel:
             )
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
             raise ModelAuthError("Anthropic rejected the API key") from e
+        except anthropic.BadRequestError as e:
+            if reason := workspace_error(e):
+                raise ModelAuthError(reason) from e
+            raise
 
         if res.stop_reason == "refusal":
             return FinalAnswer(content=REFUSAL_TEXT)

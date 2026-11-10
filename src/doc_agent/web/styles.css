@@ -1401,6 +1401,14 @@ label {
   accent-color: var(--accent);
 }
 
+.workspace-field {
+  margin-top: 12px;
+}
+
+.workspace-field label .muted {
+  font-weight: 400;
+}
+
 .privacy {
   display: flex;
   gap: 10px;

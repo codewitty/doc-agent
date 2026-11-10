@@ -44,7 +44,10 @@ function setModel(value, remember) {
 }
 
 function modelHeaders(model = getModel()) {
-  return model ? { "X-Model-Provider": model.provider, "X-Model-Key": model.key } : {};
+  if (!model) return {};
+  const headers = { "X-Model-Provider": model.provider, "X-Model-Key": model.key };
+  if (model.workspace) headers["X-Model-Workspace"] = model.workspace;
+  return headers;
 }
 
 class ApiError extends Error {
@@ -123,6 +126,7 @@ function openModelDialog() {
   const provider = model?.provider ?? "demo";
   document.querySelector(`input[name=provider][value=${provider}]`).checked = true;
   $("model-key").value = model?.key ?? "";
+  $("model-workspace").value = model?.workspace ?? "";
   let remembered = false;
   try {
     remembered = Boolean(localStorage.getItem(MODEL_STORE));
@@ -141,6 +145,7 @@ function syncKeyField() {
   const provider = selectedProvider();
   $("key-field").hidden = provider === "demo";
   $("model-key").placeholder = provider === "anthropic" ? "sk-ant-..." : "sk-...";
+  $("workspace-field").hidden = provider !== "anthropic";
   for (const el of document.querySelectorAll(".provider-name")) {
     el.textContent = provider === "anthropic" ? "Anthropic" : "OpenAI";
   }
@@ -165,16 +170,20 @@ async function saveModel(e) {
     error.textContent = "Paste an API key first.";
     return;
   }
+  const workspace = provider === "anthropic" ? $("model-workspace").value.trim() : "";
+  const model = workspace ? { provider, key, workspace } : { provider, key };
   const save = $("model-save");
   save.disabled = true;
   save.textContent = "Checking key…";
   try {
-    await api("/api/model/check", { method: "POST", model: { provider, key } });
-    setModel({ provider, key }, $("remember-key").checked);
+    await api("/api/model/check", { method: "POST", model });
+    setModel(model, $("remember-key").checked);
     renderModelBadge();
     $("model-dialog").close();
   } catch (err) {
-    error.textContent = err.status === 400 ? "That key was rejected. Check it and try again." : err.message;
+    // The server's 400 says what's wrong: a rejected key, or a missing workspace ID
+    error.textContent = err.status === 400 ? err.message : "Couldn't check the key right now. Try again shortly.";
+    if (err.message.includes("workspace")) $("model-workspace").focus();
   } finally {
     save.disabled = false;
     save.textContent = "Save";

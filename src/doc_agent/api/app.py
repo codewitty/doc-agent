@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -26,7 +27,7 @@ from doc_agent.config import Settings
 from doc_agent.container import Container, build_container
 from doc_agent.data.ingest import IngestionError
 from doc_agent.fixtures import seed_fixtures
-from doc_agent.llm.providers import DEFAULT_MODELS, PROVIDERS, Provider
+from doc_agent.llm.providers import DEFAULT_MODELS, PROVIDERS, ModelKey
 from doc_agent.logging_config import configure_logging
 from doc_agent.ports import ModelAuthError
 
@@ -80,10 +81,14 @@ def current_user(
 User = Annotated[str, Depends(current_user)]
 
 
+WORKSPACE_ID = re.compile(r"[A-Za-z0-9_-]{1,100}")
+
+
 def user_key(
     x_model_provider: Annotated[str | None, Header()] = None,
     x_model_key: Annotated[str | None, Header()] = None,
-) -> tuple[Provider, str] | None:
+    x_model_workspace: Annotated[str | None, Header()] = None,
+) -> ModelKey | None:
     """A user's own model key, sent per request and never stored or logged."""
     if x_model_provider is None and x_model_key is None:
         return None
@@ -91,14 +96,17 @@ def user_key(
         raise HTTPException(400, f"X-Model-Provider must be one of {', '.join(PROVIDERS)}")
     if not x_model_key or not x_model_key.strip():
         raise HTTPException(400, "X-Model-Key is required with X-Model-Provider")
-    return x_model_provider, x_model_key.strip()  # type: ignore[return-value]
+    workspace = (x_model_workspace or "").strip() or None
+    if workspace and not WORKSPACE_ID.fullmatch(workspace):
+        raise HTTPException(400, "X-Model-Workspace must be a workspace ID")
+    return ModelKey(x_model_provider, x_model_key.strip(), workspace)  # type: ignore[arg-type]
 
 
-UserKey = Annotated[tuple[Provider, str] | None, Depends(user_key)]
+UserKey = Annotated[ModelKey | None, Depends(user_key)]
 
 
 def get_agent(c: Deps, key: UserKey) -> Agent:
-    return c.agent(c.chat_model_for(*key) if key else None)
+    return c.agent(c.chat_model_for(key) if key else None)
 
 
 RunAgent = Annotated[Agent, Depends(get_agent)]
@@ -196,9 +204,8 @@ def create_app(container: Container | None = None, seed: bool = True) -> FastAPI
     async def check_model_key(user: User, c: Deps, key: UserKey) -> dict[str, str]:
         if key is None:
             raise HTTPException(400, "Send X-Model-Provider and X-Model-Key to check a key")
-        provider, secret = key
-        await c.verify_key(provider, secret)
-        return {"provider": provider, "model": DEFAULT_MODELS[provider], "status": "ok"}
+        await c.verify_key(key)
+        return {"provider": key.provider, "model": DEFAULT_MODELS[key.provider], "status": "ok"}
 
     @app.get("/api/documents")
     def list_documents(user: User, c: Deps) -> list[DocumentView]:
